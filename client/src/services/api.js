@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const API = axios.create({ 
-  baseURL: 'https://enpense-tracker-production.up.railway.app/api'
+  baseURL: 'https://enpense-tracker-production-7014.up.railway.app/api'
 });
 
 API.interceptors.request.use((req) => {
@@ -20,10 +20,10 @@ export const deleteTransaction = (id) => API.delete(`/transactions/${id}`);
 export const getBudgets = () => API.get('/budgets');
 export const addBudget = (data) => API.post('/budgets', data);
 
+export const categorizeAI = (description) => API.post('/ai/categorize', { description });
+export const getInsights = (transactions) => API.post('/ai/insights', { transactions });
+
 export const getBills = () => API.get('/bills');
 export const addBill = (data) => API.post('/bills', data);
 export const toggleAutoPay = (id) => API.patch(`/bills/${id}/autopay`);
 export const payBill = (id) => API.post(`/bills/${id}/pay`);
-
-export const categorizeAI = (description) => API.post('/ai/categorize', { description });
-export const getInsights = (transactions) => API.post('/ai/insights', { transactions });
