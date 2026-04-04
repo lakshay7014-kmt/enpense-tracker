@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const API = axios.create({ 
-  baseURL: 'https://enpense-tracker-production-7014.up.railway.app/api'
+  baseURL: 'https://expense-tracker-production-7014.up.railway.app/api'
 });
 
 API.interceptors.request.use((req) => {
