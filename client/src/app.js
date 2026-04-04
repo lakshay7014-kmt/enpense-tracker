@@ -3,11 +3,9 @@ const cors = require('cors');
 const app = express();
 
 app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'https://enpense-tracker.vercel.app'
-  ],
-  credentials: true
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 
