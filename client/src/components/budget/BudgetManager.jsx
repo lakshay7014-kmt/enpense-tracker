@@ -33,31 +33,27 @@ export default function BudgetManager() {
     return '#4ade80';
   };
 
-  const categories = [
-    'Food', 'Housing', 'Transport', 'Entertainment',
-    'Utilities', 'Health', 'Shopping', 'Education', 'General'
-  ];
+  const categories = ['Food', 'Housing', 'Transport', 'Entertainment', 'Utilities', 'Health', 'Shopping', 'Education', 'General'];
 
   return (
-    <div style={{ padding: '1.5rem', color: '#fff' }}>
-      <h2 style={{ marginBottom: '1.5rem', color: '#e2e8f0' }}>💰 Budget Manager</h2>
+    <div style={{ padding: '0.5rem', color: '#fff' }}>
+      <h2 style={{ color: '#e2e8f0', marginBottom: '1rem', fontSize: 'clamp(18px, 4vw, 24px)' }}>Budget Manager</h2>
 
-      {/* Add Budget Form */}
       <div style={card}>
-        <h3 style={{ marginBottom: '1rem', color: '#e2e8f0' }}>➕ Naya Budget Set karo</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+        <h3 style={{ marginBottom: '1rem', color: '#e2e8f0', fontSize: 'clamp(14px, 3vw, 18px)' }}>Set New Budget</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
           <select
             value={form.category}
             onChange={e => setForm({ ...form, category: e.target.value })}
             style={inputStyle}
           >
-            <option value="">Category select karo</option>
-            {categories.map(c => (
-              <option key={c} value={c}>{c}</option>
-            ))}
+            <option value="">Select Category</option>
+            {categories.map(function(c) {
+              return <option key={c} value={c}>{c}</option>;
+            })}
           </select>
           <input
-            placeholder="Monthly limit (₹)"
+            placeholder="Monthly limit (Rs.)"
             type="number"
             value={form.limitAmount}
             onChange={e => setForm({ ...form, limitAmount: e.target.value })}
@@ -65,51 +61,50 @@ export default function BudgetManager() {
           />
         </div>
         <button onClick={handleAdd} disabled={loading} style={{ ...btnStyle, marginTop: '0.75rem' }}>
-          {loading ? 'Set ho raha hai...' : '+ Budget Set karo'}
+          {loading ? 'Setting...' : '+ Set Budget'}
         </button>
       </div>
 
-      {/* Budgets List */}
-      <div style={{ marginTop: '1.5rem' }}>
+      <div style={{ marginTop: '1rem' }}>
         {budgets.length === 0 ? (
-          <div style={{ ...card, textAlign: 'center', color: '#94a3b8' }}>
-            Koi budget set nahi hai abhi
+          <div style={{ ...card, textAlign: 'center', color: '#94a3b8', padding: '2rem' }}>
+            No budgets set yet
           </div>
         ) : (
-          budgets.map(budget => {
-            const percent = Math.min((budget.spentAmount / budget.limitAmount) * 100, 100);
-            const remaining = budget.limitAmount - budget.spentAmount;
-            const barColor = getBarColor(percent);
+          budgets.map(function(budget) {
+            var spent = Number(budget.spent_amount || budget.spentAmount || 0);
+            var limit = Number(budget.limit_amount || budget.limitAmount || 0);
+            var percent = limit > 0 ? Math.min((spent / limit) * 100, 100) : 0;
+            var remaining = limit - spent;
+            var barColor = getBarColor(percent);
 
             return (
               <div key={budget.id} style={{ ...card, marginBottom: '0.75rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
                   <div>
-                    <h4 style={{ margin: '0 0 0.25rem', color: '#e2e8f0' }}>{budget.category}</h4>
+                    <h4 style={{ margin: '0 0 0.25rem', color: '#e2e8f0', fontSize: 'clamp(14px, 3vw, 16px)' }}>{budget.category}</h4>
                     <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>
-                      ₹{budget.spentAmount.toLocaleString()} / ₹{budget.limitAmount.toLocaleString()} kharch
+                      Rs.{spent.toLocaleString()} / Rs.{limit.toLocaleString()} spent
                     </p>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <p style={{ margin: '0 0 0.25rem', color: barColor, fontWeight: '700', fontSize: '18px' }}>
+                    <p style={{ margin: '0 0 0.25rem', color: barColor, fontWeight: '700', fontSize: 'clamp(16px, 4vw, 20px)' }}>
                       {Math.round(percent)}%
                     </p>
                     <p style={{ margin: 0, fontSize: '12px', color: remaining >= 0 ? '#4ade80' : '#ef4444' }}>
-                      {remaining >= 0 ? `₹${remaining.toLocaleString()} bacha hai` : `₹${Math.abs(remaining).toLocaleString()} over budget!`}
+                      {remaining >= 0 ? 'Rs.' + remaining.toLocaleString() + ' left' : 'Rs.' + Math.abs(remaining).toLocaleString() + ' over!'}
                     </p>
                   </div>
                 </div>
 
-                {/* Progress Bar */}
                 <div style={{ background: '#0f172a', borderRadius: '99px', height: '10px', overflow: 'hidden' }}>
                   <div style={{
-                    width: `${percent}%`, height: '100%',
+                    width: percent + '%', height: '100%',
                     background: barColor, borderRadius: '99px',
                     transition: 'width 0.5s ease'
                   }} />
                 </div>
 
-                {/* Alert */}
                 {percent >= 80 && (
                   <div style={{
                     marginTop: '0.75rem', padding: '0.5rem 0.75rem',
@@ -117,9 +112,7 @@ export default function BudgetManager() {
                     borderRadius: '8px', fontSize: '13px',
                     color: percent >= 100 ? '#f87171' : '#f97316'
                   }}>
-                    {percent >= 100
-                      ? '🚨 Budget khatam ho gaya! Aur kharch mat karo!'
-                      : '⚠️ Savdhan! Budget 80% use ho gaya hai!'}
+                    {percent >= 100 ? 'Budget finished! Stop spending!' : 'Warning! 80% of budget used!'}
                   </div>
                 )}
               </div>
