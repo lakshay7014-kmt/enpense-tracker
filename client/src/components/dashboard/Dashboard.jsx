@@ -3,8 +3,8 @@ import { getTransactions, addTransaction, deleteTransaction, categorizeAI, getIn
 import BillScheduler from '../bills/BillScheduler';
 import BudgetManager from '../budget/BudgetManager';
 import SpendingCharts from '../charts/SpendingCharts';
-import ImportTransactions from '../transactions/ImportTransactions';
 import Support from '../Support';
+import ImportTransactions from '../transactions/ImportTransactions';
 
 export default function Dashboard({ user, onLogout }) {
   const [transactions, setTransactions] = useState([]);
@@ -14,54 +14,60 @@ export default function Dashboard({ user, onLogout }) {
   const [aiLoading, setAiLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
 
-  useEffect(() => { fetchTransactions(); }, []);
+  useEffect(function() { fetchTransactions(); }, []);
 
-  const fetchTransactions = async () => {
-    try {
-      const res = await getTransactions();
-      setTransactions(res.data.transactions);
-    } catch (err) { console.log(err); }
-  };
+  function fetchTransactions() {
+    getTransactions().then(function(res) {
+      var fixed = res.data.transactions.map(function(t) {
+        return { ...t, amount: parseFloat(t.amount) || 0 };
+      });
+      setTransactions(fixed);
+    }).catch(function(err) { console.log(err); });
+  }
 
-  const handleAICategory = async () => {
+  function handleAICategory() {
     if (!form.description) return;
     setAiLoading(true);
-    try {
-      const res = await categorizeAI(form.description);
+    categorizeAI(form.description).then(function(res) {
       setForm({ ...form, category: res.data.category });
-    } catch (err) { console.log(err); }
-    setAiLoading(false);
-  };
+      setAiLoading(false);
+    }).catch(function() { setAiLoading(false); });
+  }
 
-  const handleAdd = async () => {
+  function handleAdd() {
     if (!form.description || !form.amount) return;
     setLoading(true);
-    try {
-      await addTransaction(form);
+    addTransaction(form).then(function() {
       setForm({ description: '', amount: '', type: 'expense', category: '' });
       fetchTransactions();
-    } catch (err) { console.log(err); }
-    setLoading(false);
-  };
+      setLoading(false);
+    }).catch(function() { setLoading(false); });
+  }
 
-  const handleDelete = async (id) => {
-    await deleteTransaction(id);
-    fetchTransactions();
-  };
+  function handleDelete(id) {
+    deleteTransaction(id).then(function() {
+      fetchTransactions();
+    }).catch(function(err) { console.log(err); });
+  }
 
-  const handleInsights = async () => {
+  function handleInsights() {
     if (transactions.length === 0) return;
-    try {
-      const res = await getInsights(transactions);
+    getInsights(transactions).then(function(res) {
       setInsights(res.data);
-    } catch (err) { console.log(err); }
-  };
+    }).catch(function(err) { console.log(err); });
+  }
 
-  const totalIncome = transactions.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
-  const totalExpense = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
-  const balance = totalIncome - totalExpense;
+  var totalIncome = transactions
+    .filter(function(t) { return t.type === 'income'; })
+    .reduce(function(s, t) { return s + t.amount; }, 0);
 
-  const tabs = [
+  var totalExpense = transactions
+    .filter(function(t) { return t.type === 'expense'; })
+    .reduce(function(s, t) { return s + t.amount; }, 0);
+
+  var balance = totalIncome - totalExpense;
+
+  var tabs = [
     { key: 'dashboard', label: '📊 Dashboard' },
     { key: 'import', label: '📥 Import' },
     { key: 'bills', label: '🗓️ Bills' },
@@ -84,7 +90,12 @@ export default function Dashboard({ user, onLogout }) {
         </h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <span style={{ color: '#94a3b8', fontSize: 'clamp(11px, 3vw, 14px)' }}>👋 {user.name}</span>
-          <button onClick={onLogout} style={{ ...smallBtn, background: '#ef4444' }}>Logout</button>
+          <button
+            onClick={onLogout}
+            style={{ padding: '0.4rem 0.75rem', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}
+          >
+            Logout
+          </button>
         </div>
       </div>
 
@@ -125,7 +136,7 @@ export default function Dashboard({ user, onLogout }) {
         {activeTab === 'import' && <ImportTransactions onImportDone={fetchTransactions} />}
 
         {activeTab === 'dashboard' && (
-          <>
+          <div>
             {/* Stats Cards */}
             <div style={{
               display: 'grid',
@@ -134,16 +145,20 @@ export default function Dashboard({ user, onLogout }) {
             }}>
               <div style={card}>
                 <p style={cardLabel}>Total Income</p>
-                <p style={{ ...cardValue, color: '#4ade80' }}>Rs.{totalIncome.toLocaleString()}</p>
+                <p style={{ ...cardValue, color: '#4ade80' }}>
+                  Rs.{totalIncome.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                </p>
               </div>
               <div style={card}>
                 <p style={cardLabel}>Total Expense</p>
-                <p style={{ ...cardValue, color: '#f87171' }}>Rs.{totalExpense.toLocaleString()}</p>
+                <p style={{ ...cardValue, color: '#f87171' }}>
+                  Rs.{totalExpense.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                </p>
               </div>
               <div style={card}>
                 <p style={cardLabel}>Balance</p>
                 <p style={{ ...cardValue, color: balance >= 0 ? '#4ade80' : '#f87171' }}>
-                  Rs.{balance.toLocaleString()}
+                  Rs.{balance.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
@@ -167,7 +182,7 @@ export default function Dashboard({ user, onLogout }) {
                 />
                 <button
                   onClick={handleAICategory}
-                  style={{ ...smallBtn, marginBottom: '0.75rem', width: '100%' }}
+                  style={{ width: '100%', padding: '0.6rem', background: '#334155', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', marginBottom: '0.75rem' }}
                 >
                   {aiLoading ? 'Detecting...' : '🤖 Auto Detect Category'}
                 </button>
@@ -203,7 +218,9 @@ export default function Dashboard({ user, onLogout }) {
                   <h3 style={{ color: '#e2e8f0', margin: 0, fontSize: 'clamp(13px, 3vw, 17px)' }}>
                     Transactions ({transactions.length})
                   </h3>
-                  <button onClick={handleInsights} style={smallBtn}>🤖 AI Insights</button>
+                  <button onClick={handleInsights} style={{ padding: '0.4rem 0.75rem', background: '#334155', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
+                    🤖 AI Insights
+                  </button>
                 </div>
 
                 {transactions.length === 0 && (
@@ -227,7 +244,7 @@ export default function Dashboard({ user, onLogout }) {
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
                           <span style={{ color: t.type === 'income' ? '#4ade80' : '#f87171', fontWeight: '600', fontSize: 'clamp(12px, 3vw, 14px)' }}>
-                            {t.type === 'income' ? '+' : '-'}Rs.{Number(t.amount).toLocaleString()}
+                            {t.type === 'income' ? '+' : '-'}Rs.{t.amount.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                           </span>
                           <button
                             onClick={function() { handleDelete(t.id); }}
@@ -276,7 +293,7 @@ export default function Dashboard({ user, onLogout }) {
                 })}
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
     </div>
@@ -288,4 +305,3 @@ const cardLabel = { color: '#94a3b8', fontSize: '12px', margin: '0 0 0.25rem' };
 const cardValue = { fontSize: 'clamp(16px, 4vw, 22px)', fontWeight: '700', margin: 0 };
 const inputStyle = { width: '100%', padding: '0.6rem 1rem', marginBottom: '0.75rem', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#fff', fontSize: '14px', boxSizing: 'border-box' };
 const btnStyle = { width: '100%', padding: '0.75rem', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '15px', cursor: 'pointer', fontWeight: '600' };
-const smallBtn = { padding: '0.4rem 0.75rem', background: '#334155', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' };
