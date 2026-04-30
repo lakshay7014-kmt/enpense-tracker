@@ -8,9 +8,16 @@ router.get('/', auth, async (req, res) => {
     const transactions = await knex('transactions')
       .where({ user_id: req.user.id })
       .orderBy('date', 'desc');
-    const total = transactions.reduce((sum, t) =>
-      t.type === 'income' ? sum + Number(t.amount) : sum - Number(t.amount), 0);
-    res.json({ transactions, total, count: transactions.length });
+
+    const fixed = transactions.map(t => ({
+      ...t,
+      amount: parseFloat(t.amount) || 0
+    }));
+
+    const total = fixed.reduce((sum, t) =>
+      t.type === 'income' ? sum + t.amount : sum - t.amount, 0);
+
+    res.json({ transactions: fixed, total, count: fixed.length });
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
@@ -18,9 +25,17 @@ router.post('/', auth, async (req, res) => {
   try {
     const { description, amount, type, category } = req.body;
     const [transaction] = await knex('transactions')
-      .insert({ user_id: req.user.id, description, amount, type, category: category || 'General' })
+      .insert({
+        user_id: req.user.id,
+        description,
+        amount: parseFloat(amount),
+        type,
+        category: category || 'General'
+      })
       .returning('*');
-    res.json({ message: 'Transaction add ho gaya!', transaction });
+
+    transaction.amount = parseFloat(transaction.amount);
+    res.json({ message: 'Transaction added!', transaction });
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
@@ -29,7 +44,7 @@ router.delete('/:id', auth, async (req, res) => {
     await knex('transactions')
       .where({ id: req.params.id, user_id: req.user.id })
       .delete();
-    res.json({ message: 'Transaction delete ho gaya!' });
+    res.json({ message: 'Transaction deleted!' });
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
