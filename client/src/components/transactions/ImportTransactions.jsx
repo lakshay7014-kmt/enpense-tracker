@@ -24,48 +24,27 @@ export default function ImportTransactions({ onImportDone }) {
   function extractTransactions(text) {
     var results = [];
     var lines = text.split('\n');
-
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
       if (!line || line.length < 5) continue;
-
       var amountMatch = line.match(/([\d,]+\.?\d*)/g);
       if (!amountMatch) continue;
-
       var amount = 0;
       for (var k = 0; k < amountMatch.length; k++) {
         var val = parseFloat(amountMatch[k].replace(/,/g, ''));
-        if (val > 0 && val < 10000000) {
-          amount = val;
-          break;
-        }
+        if (val > 0 && val < 10000000) { amount = val; break; }
       }
-
       if (amount === 0) continue;
-
       var type = 'expense';
       if (line.match(/credit|credited|received|deposit|income|salary|cr\b/i)) type = 'income';
       if (line.match(/debit|debited|paid|payment|dr\b|withdrawal/i)) type = 'expense';
-
-      var description = line
-        .replace(/([\d,]+\.?\d*)/g, '')
-        .replace(/[|\/\\]/g, ' ')
-        .trim();
-
+      var description = line.replace(/([\d,]+\.?\d*)/g, '').replace(/[|\/\\]/g, ' ').trim();
       if (description.length > 80) description = description.substring(0, 80);
       if (!description || description.length < 3) description = 'Bank Transaction';
-
       var category = detectCategory(description);
       if (category === 'Income') type = 'income';
-
-      results.push({
-        description: description,
-        amount: amount,
-        type: type,
-        category: category
-      });
+      results.push({ description: description, amount: amount, type: type, category: category });
     }
-
     return results;
   }
 
@@ -89,13 +68,12 @@ export default function ImportTransactions({ onImportDone }) {
     return results;
   }
 
-  async function processPDFWithOCR(file) {
+  async function processPDF(file) {
     var pdfjsLib = await import('pdfjs-dist');
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@5.7.284/build/pdf.worker.min.mjs';
 
     var arrayBuffer = await file.arrayBuffer();
     var pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-
     var allText = '';
     var totalPages = pdf.numPages;
 
@@ -103,42 +81,35 @@ export default function ImportTransactions({ onImportDone }) {
       setProgress('Reading page ' + i + ' of ' + totalPages + '...');
       var page = await pdf.getPage(i);
 
-      // Pehle text-based try karo
+      // Text based try karo pehle
       var content = await page.getTextContent();
       var pageText = content.items.map(function(item) { return item.str; }).join(' ');
 
       if (pageText.trim().length > 50) {
-        // Text-based PDF — seedha text lo
         allText += pageText + '\n';
       } else {
-        // Scanned PDF — image render karke OCR chalao
-        setProgress('Scanning page ' + i + ' of ' + totalPages + ' (OCR)...');
-
+        // Scanned PDF — OCR use karo
+        setProgress('Scanning page ' + i + ' of ' + totalPages + ' with OCR...');
         var viewport = page.getViewport({ scale: 2.0 });
         var canvas = document.createElement('canvas');
         var context = canvas.getContext('2d');
         canvas.height = viewport.height;
         canvas.width = viewport.width;
-
         await page.render({ canvasContext: context, viewport: viewport }).promise;
-
         var imageData = canvas.toDataURL('image/png');
 
-        // Tesseract OCR
         var Tesseract = await import('tesseract.js');
         var result = await Tesseract.recognize(imageData, 'eng', {
           logger: function(m) {
             if (m.status === 'recognizing text') {
-              setProgress('OCR Progress: ' + Math.round(m.progress * 100) + '%');
+              setProgress('OCR: ' + Math.round(m.progress * 100) + '% done...');
             }
           }
         });
-
         allText += result.data.text + '\n';
         canvas.remove();
       }
     }
-
     return allText;
   }
 
@@ -149,7 +120,6 @@ export default function ImportTransactions({ onImportDone }) {
     setStatus('');
     setPreview([]);
     setProgress('');
-
     var ext = file.name.split('.').pop().toLowerCase();
 
     if (ext === 'csv') {
@@ -160,18 +130,14 @@ export default function ImportTransactions({ onImportDone }) {
         else setPreview(results);
       };
       reader.readAsText(file);
-
     } else if (ext === 'pdf') {
       setStatus('loading');
       try {
-        var text = await processPDFWithOCR(file);
+        var text = await processPDF(file);
         var results = extractTransactions(text);
         setProgress('');
         if (results.length === 0) setStatus('no_data');
-        else {
-          setPreview(results);
-          setStatus('');
-        }
+        else { setPreview(results); setStatus(''); }
       } catch (err) {
         console.log(err);
         setProgress('');
@@ -217,7 +183,7 @@ export default function ImportTransactions({ onImportDone }) {
         Import Transactions
       </h2>
       <p style={{ color: '#94a3b8', marginBottom: '1.5rem', fontSize: '14px' }}>
-        Upload CSV or PDF (text or scanned) — transactions will be added automatically!
+        Upload CSV or PDF — text based or scanned both supported!
       </p>
 
       <div style={{ background: '#1e293b', padding: '1.5rem', borderRadius: '12px', marginBottom: '1rem' }}>
@@ -237,12 +203,7 @@ export default function ImportTransactions({ onImportDone }) {
           <p style={{ color: '#64748b', margin: 0, fontSize: '12px' }}>
             Supports: CSV, Text PDF, Scanned PDF (OCR)
           </p>
-          <input
-            type="file"
-            accept=".csv,.pdf"
-            onChange={handleFile}
-            style={{ display: 'none' }}
-          />
+          <input type="file" accept=".csv,.pdf" onChange={handleFile} style={{ display: 'none' }} />
         </label>
 
         {status === 'loading' && (
@@ -251,10 +212,10 @@ export default function ImportTransactions({ onImportDone }) {
               Processing file...
             </p>
             {progress && (
-              <p style={{ color: '#94a3b8', fontSize: '12px' }}>{progress}</p>
+              <p style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '0.5rem' }}>{progress}</p>
             )}
-            <div style={{ background: '#0f172a', borderRadius: '99px', height: '6px', overflow: 'hidden', marginTop: '0.5rem' }}>
-              <div style={{ width: '60%', height: '100%', background: '#6366f1', borderRadius: '99px', animation: 'pulse 1.5s infinite' }} />
+            <div style={{ background: '#0f172a', borderRadius: '99px', height: '6px', overflow: 'hidden' }}>
+              <div style={{ width: '70%', height: '100%', background: '#6366f1', borderRadius: '99px' }} />
             </div>
           </div>
         )}
@@ -285,12 +246,7 @@ export default function ImportTransactions({ onImportDone }) {
             <button
               onClick={handleImport}
               disabled={importing}
-              style={{
-                padding: '0.5rem 1.25rem', background: '#6366f1',
-                color: '#fff', border: 'none', borderRadius: '8px',
-                cursor: importing ? 'not-allowed' : 'pointer',
-                fontWeight: '600', fontSize: '14px'
-              }}
+              style={{ padding: '0.5rem 1.25rem', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '8px', cursor: importing ? 'not-allowed' : 'pointer', fontWeight: '600', fontSize: '14px' }}
             >
               {importing ? 'Importing...' : 'Import All (' + preview.length + ')'}
             </button>
