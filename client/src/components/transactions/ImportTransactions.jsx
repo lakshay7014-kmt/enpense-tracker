@@ -16,34 +16,59 @@ export default function ImportTransactions({ onImportDone }) {
     if (d.match(/electricity|wifi|internet|mobile|recharge|bill|jio|airtel/)) return 'Utilities';
     if (d.match(/doctor|medicine|hospital|pharmacy|health|medical/)) return 'Health';
     if (d.match(/shopping|flipkart|clothes|shoes|myntra|meesho/)) return 'Shopping';
-    if (d.match(/salary|credited|received|income|bonus/)) return 'Income';
+    if (d.match(/salary|income|bonus/)) return 'Income';
     if (d.match(/rent|house|pg|hostel|apartment/)) return 'Housing';
+    if (d.match(/top.?up|upi lite/)) return 'Transfer';
     return 'General';
   }
 
-  function extractTransactions(text) {
+  function parseGPayPDF(text) {
     var results = [];
-    var lines = text.split('\n');
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i].trim();
-      if (!line || line.length < 5) continue;
-      var amountMatch = line.match(/([\d,]+\.?\d*)/g);
-      if (!amountMatch) continue;
-      var amount = 0;
-      for (var k = 0; k < amountMatch.length; k++) {
-        var val = parseFloat(amountMatch[k].replace(/,/g, ''));
-        if (val > 0 && val < 10000000) { amount = val; break; }
+    var lines = text.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 0; });
+
+    var i = 0;
+    while (i < lines.length) {
+      var line = lines[i];
+
+      // GPay pattern: "Paid to NAME" or "Received from NAME" or "Top-up"
+      var isPaid = line.match(/^Paid to (.+)/i);
+      var isReceived = line.match(/^Received from (.+)/i);
+      var isTopUp = line.match(/^Top-?up/i);
+
+      if (isPaid || isReceived || isTopUp) {
+        var description = line;
+        var type = isPaid || isTopUp ? 'expense' : 'income';
+        var amount = 0;
+
+        // Amount dhundo agle 5 lines mein
+        for (var j = i + 1; j < Math.min(i + 6, lines.length); j++) {
+          var amountLine = lines[j];
+          // GPay amount format: 60, 109, 160 etc (without Rs symbol in text)
+          var amountMatch = amountLine.match(/^[₹Rs\.]?\s*([\d,]+)$/);
+          if (amountMatch) {
+            amount = parseFloat(amountMatch[1].replace(/,/g, ''));
+            break;
+          }
+          // Inline amount
+          var inlineMatch = amountLine.match(/[₹Rs\.]\s*([\d,]+)/);
+          if (inlineMatch) {
+            amount = parseFloat(inlineMatch[1].replace(/,/g, ''));
+            break;
+          }
+        }
+
+        if (amount > 0) {
+          var category = detectCategory(description);
+          if (isReceived) category = 'Income';
+          results.push({
+            description: description,
+            amount: amount,
+            type: type,
+            category: category
+          });
+        }
       }
-      if (amount === 0) continue;
-      var type = 'expense';
-      if (line.match(/credit|credited|received|deposit|income|salary|cr\b/i)) type = 'income';
-      if (line.match(/debit|debited|paid|payment|dr\b|withdrawal/i)) type = 'expense';
-      var description = line.replace(/([\d,]+\.?\d*)/g, '').replace(/[|\/\\]/g, ' ').trim();
-      if (description.length > 80) description = description.substring(0, 80);
-      if (!description || description.length < 3) description = 'Bank Transaction';
-      var category = detectCategory(description);
-      if (category === 'Income') type = 'income';
-      results.push({ description: description, amount: amount, type: type, category: category });
+      i++;
     }
     return results;
   }
@@ -62,7 +87,6 @@ export default function ImportTransactions({ onImportDone }) {
       var type = amount < 0 ? 'expense' : 'income';
       if (amount < 0) amount = Math.abs(amount);
       var category = detectCategory(description);
-      if (category === 'Income') type = 'income';
       results.push({ description: description, amount: amount, type: type, category: category });
     }
     return results;
@@ -80,36 +104,37 @@ export default function ImportTransactions({ onImportDone }) {
     for (var i = 1; i <= totalPages; i++) {
       setProgress('Reading page ' + i + ' of ' + totalPages + '...');
       var page = await pdf.getPage(i);
-
-      // Text based try karo pehle
       var content = await page.getTextContent();
-      var pageText = content.items.map(function(item) { return item.str; }).join(' ');
 
-      if (pageText.trim().length > 50) {
-        allText += pageText + '\n';
-      } else {
-        // Scanned PDF — OCR use karo
-        setProgress('Scanning page ' + i + ' of ' + totalPages + ' with OCR...');
-        var viewport = page.getViewport({ scale: 2.0 });
-        var canvas = document.createElement('canvas');
-        var context = canvas.getContext('2d');
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-        await page.render({ canvasContext: context, viewport: viewport }).promise;
-        var imageData = canvas.toDataURL('image/png');
+      // GPay PDF mein items ko line by line rakhna zaroori hai
+      var items = content.items;
+      var pageLines = [];
+      var currentY = null;
+      var currentLine = '';
 
-        var Tesseract = await import('tesseract.js');
-        var result = await Tesseract.recognize(imageData, 'eng', {
-          logger: function(m) {
-            if (m.status === 'recognizing text') {
-              setProgress('OCR: ' + Math.round(m.progress * 100) + '% done...');
-            }
-          }
-        });
-        allText += result.data.text + '\n';
-        canvas.remove();
+      for (var k = 0; k < items.length; k++) {
+        var item = items[k];
+        var y = Math.round(item.transform[5]);
+        var text = item.str.trim();
+
+        if (!text) continue;
+
+        if (currentY === null) {
+          currentY = y;
+          currentLine = text;
+        } else if (Math.abs(y - currentY) < 5) {
+          currentLine += ' ' + text;
+        } else {
+          if (currentLine.trim()) pageLines.push(currentLine.trim());
+          currentY = y;
+          currentLine = text;
+        }
       }
+      if (currentLine.trim()) pageLines.push(currentLine.trim());
+
+      allText += pageLines.join('\n') + '\n';
     }
+
     return allText;
   }
 
@@ -134,7 +159,7 @@ export default function ImportTransactions({ onImportDone }) {
       setStatus('loading');
       try {
         var text = await processPDF(file);
-        var results = extractTransactions(text);
+        var results = parseGPayPDF(text);
         setProgress('');
         if (results.length === 0) setStatus('no_data');
         else { setPreview(results); setStatus(''); }
@@ -175,7 +200,7 @@ export default function ImportTransactions({ onImportDone }) {
     setPreview(preview.filter(function(_, i) { return i !== index; }));
   }
 
-  var categories = ['Food', 'Transport', 'Entertainment', 'Utilities', 'Health', 'Shopping', 'Housing', 'Education', 'Income', 'General'];
+  var categories = ['Food', 'Transport', 'Entertainment', 'Utilities', 'Health', 'Shopping', 'Housing', 'Education', 'Income', 'General', 'Transfer'];
 
   return (
     <div style={{ padding: '0.5rem', color: '#fff' }}>
@@ -183,7 +208,7 @@ export default function ImportTransactions({ onImportDone }) {
         Import Transactions
       </h2>
       <p style={{ color: '#94a3b8', marginBottom: '1.5rem', fontSize: '14px' }}>
-        Upload CSV or PDF — text based or scanned both supported!
+        Upload Google Pay PDF or CSV — transactions will be added automatically!
       </p>
 
       <div style={{ background: '#1e293b', padding: '1.5rem', borderRadius: '12px', marginBottom: '1rem' }}>
@@ -198,10 +223,10 @@ export default function ImportTransactions({ onImportDone }) {
         }}>
           <p style={{ color: '#94a3b8', margin: '0 0 0.5rem', fontSize: '32px' }}>📂</p>
           <p style={{ color: '#94a3b8', margin: '0 0 0.5rem', fontSize: '14px' }}>
-            {fileName ? fileName : 'Click to select CSV or PDF file'}
+            {fileName ? fileName : 'Click to select GPay PDF or CSV file'}
           </p>
           <p style={{ color: '#64748b', margin: 0, fontSize: '12px' }}>
-            Supports: CSV, Text PDF, Scanned PDF (OCR)
+            Supports: Google Pay PDF, PhonePe CSV, Bank CSV
           </p>
           <input type="file" accept=".csv,.pdf" onChange={handleFile} style={{ display: 'none' }} />
         </label>
@@ -209,7 +234,7 @@ export default function ImportTransactions({ onImportDone }) {
         {status === 'loading' && (
           <div style={{ marginTop: '1rem', textAlign: 'center' }}>
             <p style={{ color: '#818cf8', fontSize: '13px', marginBottom: '0.5rem' }}>
-              Processing file...
+              Reading PDF...
             </p>
             {progress && (
               <p style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '0.5rem' }}>{progress}</p>
@@ -241,7 +266,7 @@ export default function ImportTransactions({ onImportDone }) {
         <div style={{ background: '#1e293b', padding: '1.5rem', borderRadius: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
             <h3 style={{ color: '#e2e8f0', margin: 0, fontSize: 'clamp(14px, 3vw, 18px)' }}>
-              Preview — {preview.length} Transactions
+              Preview — {preview.length} Transactions Found
             </h3>
             <button
               onClick={handleImport}
